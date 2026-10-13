@@ -1,7 +1,7 @@
 // Builds public/index.json + public/emb.bin (int8 DINOv2-small CLS embeddings of every product photo).
 // Incremental: reuses embeddings for images already in the previous index (same model). Usage: node scripts/build-index.mjs [workers]
 import fs from 'fs'; import { fork } from 'child_process';
-const STORE = 'https://isijaradresses.com', PER = 20, D = 384, Q = 127;
+const STORE = 'https://isijaradresses.com', PER = 1000, D = 384, Q = 127;
 if (process.argv[2] === '--worker') {
   const { embedBuffer } = await import('./embed.mjs');
   process.on('message', async ({ src }) => {

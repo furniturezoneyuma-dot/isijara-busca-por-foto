@@ -60,8 +60,10 @@ $('f').onchange=async e=>{
     const [h,t,im,pr]=idx.products[order[0]];
     st.textContent='';
     window.__results=order.map(i=>idx.products[i][0]);
+    const twins=order.slice(1).filter(i=>best[order[0]]-best[i]<=Math.abs(best[order[0]])*0.003);
     $('res').innerHTML=`<a class="btn" href="${STORE+h}"${tgt}>Ver vestido</a>
       <a class="top" href="${STORE+h}"${tgt} style="color:#000;text-decoration:none"><img src="${im}" alt=""><div><b>${esc(t)}</b><div class="pr">${money(pr)}</div></div></a>
+      ${twins.length?`<div class="pr" style="margin-top:10px">Esta misma foto también está en: ${twins.map(i=>`<a href="${STORE+idx.products[i][0]}"${tgt} style="color:#000">${esc(idx.products[i][1])}</a>`).join(' · ')}</div>`:''}
       <h2>Parecidos</h2><div class="g">${order.slice(1).map(i=>{const[h,t,im,pr]=idx.products[i];return`<a href="${STORE+h}"${tgt}><img loading="lazy" src="${im}" alt=""><div>${esc(t)}</div><div class="pr">${money(pr)}</div></a>`}).join('')}</div>`;
     console.log('ms',Math.round(performance.now()-t0));
   }catch(err){console.error(err);st.textContent='No pudimos leer la imagen. Intenta con otra captura.'}
