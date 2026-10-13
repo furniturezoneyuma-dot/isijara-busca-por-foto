@@ -1,0 +1,24 @@
+name: Actualizar índice de fotos
+on:
+  schedule: [{cron: '0 */6 * * *'}]
+  workflow_dispatch:
+permissions: {contents: write}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 20, cache: npm}
+      - run: npm ci
+      - run: node scripts/build-index.mjs
+      - name: Commit if changed
+        run: |
+          python3 - <<'PY'
+          import json;d=json.load(open('public/index.json'));d['updated']='';open('/tmp/a','w').write(json.dumps(d))
+          PY
+          git show HEAD:public/index.json | python3 -c "import json,sys;d=json.load(sys.stdin);d['updated']='';open('/tmp/b','w').write(json.dumps(d))"
+          if cmp -s /tmp/a /tmp/b && git diff --quiet public/emb.bin; then echo "sin cambios"; exit 0; fi
+          git config user.name "isijara-bot"; git config user.email "actions@users.noreply.github.com"
+          git add public && git commit -m "Actualizar índice $(date -u +%F)" && git push
