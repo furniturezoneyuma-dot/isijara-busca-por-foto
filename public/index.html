@@ -1,0 +1,59 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Busca por foto · Isijara Boutique</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Helvetica,Arial,sans-serif;background:#fff;color:#000}
+.w{max-width:560px;margin:0 auto;padding:20px 16px 40px}h1{font-size:22px;letter-spacing:.12em;text-transform:uppercase;text-align:center;margin:8px 0 4px}
+p.s{text-align:center;color:#555;font-size:14px;margin:0 0 18px}
+label.up{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:1.5px dashed #000;padding:28px 12px;cursor:pointer;text-align:center;font-size:15px;letter-spacing:.06em;text-transform:uppercase}
+label.up svg{width:34px;height:34px}input[type=file]{display:none}
+#prev{display:none;max-width:100%;max-height:260px;margin:14px auto 0}
+#st{text-align:center;font-size:14px;color:#333;margin:14px 0;min-height:20px}
+.btn{display:block;background:#000;color:#fff;text-decoration:none;text-align:center;padding:15px;font-size:15px;letter-spacing:.1em;text-transform:uppercase;margin:6px 0 4px}
+.top{display:flex;gap:12px;align-items:center;border:1px solid #000;padding:10px;margin-top:8px}.top img{width:96px;aspect-ratio:3/4;object-fit:cover}
+.top b{font-size:15px}.pr{color:#555;font-size:14px;margin-top:4px}
+h2{font-size:14px;letter-spacing:.12em;text-transform:uppercase;margin:24px 0 10px;border-top:1px solid #000;padding-top:14px}
+.g{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}@media(min-width:480px){.g{grid-template-columns:repeat(4,1fr)}}
+.g a{color:#000;text-decoration:none;font-size:12px;line-height:1.3}.g img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;margin-bottom:4px;background:#f2f2f2}
+.sp{display:inline-block;width:14px;height:14px;border:2px solid #000;border-right-color:transparent;border-radius:50%;animation:r 1s linear infinite;vertical-align:-2px;margin-right:6px}@keyframes r{to{transform:rotate(360deg)}}
+</style></head><body><div class="w">
+<h1>Busca por foto</h1><p class="s">¿Viste un vestido en Facebook? Sube tu captura y te mostramos el vestido.</p>
+<label class="up"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.5"><path d="M3 8h3l2-3h8l2 3h3v12H3z"/><circle cx="12" cy="13.5" r="4"/></svg>Sube tu captura<small style="text-transform:none;letter-spacing:0;color:#666">o toma una foto</small><input id="f" type="file" accept="image/*"></label>
+<img id="prev" alt=""><div id="st"></div><div id="res"></div></div>
+<script type="module">
+import { AutoProcessor, CLIPVisionModelWithProjection, RawImage, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5';
+env.allowLocalModels=false;
+const STORE='https://isijaradresses.com/products/',$=id=>document.getElementById(id),st=$('st');
+const inIframe=window.self!==window.top;
+let idx,emb,proc,model;
+const ready=(async()=>{
+  const [j,b]=await Promise.all([fetch('index.json',{cache:'no-cache'}).then(r=>r.json()),fetch('emb.bin',{cache:'no-cache'}).then(r=>r.arrayBuffer())]);
+  idx=j;emb=new Int8Array(b);
+  proc=await AutoProcessor.from_pretrained(j.model);
+  model=await CLIPVisionModelWithProjection.from_pretrained(j.model,{dtype:j.dtype});
+})();
+ready.catch(e=>{st.textContent='Error al cargar. Intenta de nuevo.';console.error(e)});
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const money=p=>p?'$'+Number(p).toFixed(2):'';
+const tgt=inIframe?' target="_top"':'';
+$('f').onchange=async e=>{
+  const file=e.target.files[0];if(!file)return;
+  const url=URL.createObjectURL(file);$('prev').src=url;$('prev').style.display='block';$('res').innerHTML='';
+  st.innerHTML='<span class="sp"></span>Buscando… (la primera vez puede tardar unos segundos)';
+  try{
+    await ready;const t0=performance.now();
+    const img=await RawImage.fromURL(url);
+    const {image_embeds}=await model(await proc(img));const q=image_embeds.data;
+    let n=0;for(const x of q)n+=x*x;n=Math.sqrt(n);
+    const D=idx.dim,N=idx.owner.length,best=new Float32Array(idx.products.length).fill(-1e9);
+    for(let i=0;i<N;i++){let s=0;const o=i*D;for(let d=0;d<D;d++)s+=emb[o+d]*q[d];const p=idx.owner[i];if(s>best[p])best[p]=s;}
+    const order=[...best.keys()].sort((a,b)=>best[b]-best[a]).slice(0,9);
+    const [h,t,im,pr]=idx.products[order[0]];
+    st.textContent='';
+    window.__results=order.map(i=>idx.products[i][0]);
+    $('res').innerHTML=`<a class="btn" href="${STORE+h}"${tgt}>Ver vestido</a>
+      <a class="top" href="${STORE+h}"${tgt} style="color:#000;text-decoration:none"><img src="${im}" alt=""><div><b>${esc(t)}</b><div class="pr">${money(pr)}</div></div></a>
+      <h2>Parecidos</h2><div class="g">${order.slice(1).map(i=>{const[h,t,im,pr]=idx.products[i];return`<a href="${STORE+h}"${tgt}><img loading="lazy" src="${im}" alt=""><div>${esc(t)}</div><div class="pr">${money(pr)}</div></a>`}).join('')}</div>`;
+    console.log('ms',Math.round(performance.now()-t0));
+  }catch(err){console.error(err);st.textContent='No pudimos leer la imagen. Intenta con otra captura.'}
+};
+</script></body></html>

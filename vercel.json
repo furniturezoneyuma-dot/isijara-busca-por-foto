@@ -1,0 +1,3 @@
+{"outputDirectory":"public","buildCommand":"","framework":null,
+"headers":[{"source":"/(.*)","headers":[{"key":"Content-Security-Policy","value":"frame-ancestors 'self' https://isijaradresses.com https://*.isijaradresses.com https://*.myshopify.com https://admin.shopify.com"}]},
+{"source":"/(index.json|emb.bin)","headers":[{"key":"Cache-Control","value":"public, max-age=0, s-maxage=300, must-revalidate"}]}]}
