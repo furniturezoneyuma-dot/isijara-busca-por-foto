@@ -20,8 +20,8 @@ h2{font-size:14px;letter-spacing:.12em;text-transform:uppercase;margin:24px 0 10
 <label class="up"><svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="1.5"><path d="M3 8h3l2-3h8l2 3h3v12H3z"/><circle cx="12" cy="13.5" r="4"/></svg>Sube tu captura<small style="text-transform:none;letter-spacing:0;color:#666">o toma una foto</small><input id="f" type="file" accept="image/*"></label>
 <img id="prev" alt=""><div id="st"></div><div id="res"></div></div>
 <script type="module">
-import { AutoProcessor, CLIPVisionModelWithProjection, RawImage, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5';
-env.allowLocalModels=false;
+import { AutoProcessor, AutoModel, RawImage, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.5';
+env.allowLocalModels=false;env.backends.onnx.wasm.numThreads=1;
 const STORE='https://isijaradresses.com/products/',$=id=>document.getElementById(id),st=$('st');
 const inIframe=window.self!==window.top;
 let idx,emb,proc,model;
@@ -29,7 +29,7 @@ const ready=(async()=>{
   const [j,b]=await Promise.all([fetch('index.json',{cache:'no-cache'}).then(r=>r.json()),fetch('emb.bin',{cache:'no-cache'}).then(r=>r.arrayBuffer())]);
   idx=j;emb=new Int8Array(b);
   proc=await AutoProcessor.from_pretrained(j.model);
-  model=await CLIPVisionModelWithProjection.from_pretrained(j.model,{dtype:j.dtype});
+  model=await AutoModel.from_pretrained(j.model,{dtype:'fp16'});
 })();
 ready.catch(e=>{st.textContent='Error al cargar. Intenta de nuevo.';console.error(e)});
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -38,14 +38,24 @@ const tgt=inIframe?' target="_top"':'';
 $('f').onchange=async e=>{
   const file=e.target.files[0];if(!file)return;
   const url=URL.createObjectURL(file);$('prev').src=url;$('prev').style.display='block';$('res').innerHTML='';
-  st.innerHTML='<span class="sp"></span>Buscando… (la primera vez puede tardar unos segundos)';
+  st.innerHTML='<span class="sp"></span>Buscando… (la primera vez puede tardar unos segundos mientras se carga)';
   try{
     await ready;const t0=performance.now();
-    const img=await RawImage.fromURL(url);
-    const {image_embeds}=await model(await proc(img));const q=image_embeds.data;
-    let n=0;for(const x of q)n+=x*x;n=Math.sqrt(n);
+    const bmp=await createImageBitmap(file);const W=bmp.width,H=bmp.height;
+    // windows: whole image + 3:4 portrait windows sliding down tall screenshots (+ left/right for wide ones)
+    const wins=[[0,0,W,H]];
+    const wh=Math.round(W*4/3);if(H>wh*1.1){for(const f of[0,.25,.5,.75,1])wins.push([0,Math.round((H-wh)*f),W,wh]);}
+    const ww=Math.round(H*3/4);if(W>ww*1.1){for(const f of[0,.5,1])wins.push([Math.round((W-ww)*f),0,ww,H]);}
     const D=idx.dim,N=idx.owner.length,best=new Float32Array(idx.products.length).fill(-1e9);
-    for(let i=0;i<N;i++){let s=0;const o=i*D;for(let d=0;d<D;d++)s+=emb[o+d]*q[d];const p=idx.owner[i];if(s>best[p])best[p]=s;}
+    const cv=document.createElement('canvas');cv.width=cv.height=224;const cx=cv.getContext('2d',{willReadFrequently:true});
+    for(const [x,y,w,h] of wins){
+      cx.fillStyle='#fff';cx.fillRect(0,0,224,224);const sc=224/Math.max(w,h),dw=w*sc,dh=h*sc;
+      cx.drawImage(bmp,x,y,w,h,(224-dw)/2,(224-dh)/2,dw,dh);
+      const px=cx.getImageData(0,0,224,224).data,rgb=new Uint8ClampedArray(224*224*3);
+      for(let i=0,j=0;i<px.length;i+=4){rgb[j++]=px[i];rgb[j++]=px[i+1];rgb[j++]=px[i+2];}
+      const o=await model(await proc(new RawImage(rgb,224,224,3)));const L=o.last_hidden_state,q0=L.data.slice(0,L.dims[2]);let n=0;for(const v of q0)n+=v*v;n=Math.sqrt(n);const q=q0.map(v=>v/n);
+      for(let i=0;i<N;i++){let s=0;const o=i*D;for(let d=0;d<D;d++)s+=emb[o+d]*q[d];const p=idx.owner[i];if(s>best[p])best[p]=s;}
+    }
     const order=[...best.keys()].sort((a,b)=>best[b]-best[a]).slice(0,9);
     const [h,t,im,pr]=idx.products[order[0]];
     st.textContent='';
